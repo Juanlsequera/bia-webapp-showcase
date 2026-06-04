@@ -6,31 +6,31 @@
 #
 # Si deployás a un plan pago de Render, podés borrar este archivo.
 
-name: Keep-alive Render API
+# name: Keep-alive Render API
 
-on:
-  schedule:
-    # Cada 10 minutos entre 12:00–03:00 UTC (= 08:00–23:00 Venezuela UTC-4)
-    # Cron syntax: minuto hora día mes día-semana
-    - cron: '*/10 12-23 * * *'
-    - cron: '*/10 0-3 * * *'
-  # Permite correrlo manualmente desde GitHub → Actions
-  workflow_dispatch:
+# on:
+#   schedule:
+#     # Cada 10 minutos entre 12:00–03:00 UTC (= 08:00–23:00 Venezuela UTC-4)
+#     # Cron syntax: minuto hora día mes día-semana
+#     - cron: "*/10 12-23 * * *"
+#     - cron: "*/10 0-3 * * *"
+#   # Permite correrlo manualmente desde GitHub → Actions
+#   workflow_dispatch:
 
-jobs:
-  ping:
-    name: Ping /health
-    runs-on: ubuntu-latest
-    steps:
-      - name: Pinguear API
-        run: |
-          echo "Pingiando la API..."
-          STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
-            --max-time 60 \
-            "${{ secrets.API_PROD_URL }}/health")
-          echo "Status: $STATUS"
-          if [ "$STATUS" != "200" ]; then
-            echo "⚠ La API respondió $STATUS — puede estar iniciando o caída"
-            exit 1
-          fi
-          echo "✅ API activa"
+# jobs:
+#   ping:
+#     name: Ping /health
+#     runs-on: ubuntu-latest
+#     steps:
+#       - name: Pinguear API
+#         run: |
+#           echo "Pingiando la API..."
+#           STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+#             --max-time 60 \
+#             "${{ secrets.API_PROD_URL }}/health")
+#           echo "Status: $STATUS"
+#           if [ "$STATUS" != "200" ]; then
+#             echo "⚠ La API respondió $STATUS — puede estar iniciando o caída"
+#             exit 1
+#           fi
+#           echo "✅ API activa"
