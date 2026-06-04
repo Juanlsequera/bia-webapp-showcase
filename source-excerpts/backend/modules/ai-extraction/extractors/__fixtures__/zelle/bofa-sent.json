@@ -1,0 +1,16 @@
+{
+  "isValidDocument": true,
+  "amount": 150.0,
+  "currency": "USD",
+  "date": "2026-05-20",
+  "time": "09:45",
+  "reference": "Z1234567890",
+  "senderEmail": "juan@gmail.com",
+  "recipientEmail": "negocio@empresa.com",
+  "senderName": "Juan Perez",
+  "recipientName": "Servicios Tech",
+  "memo": "Payment for services",
+  "bankApp": "Bank of America",
+  "confidence": "high",
+  "notes": null
+}

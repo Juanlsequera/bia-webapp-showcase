@@ -1,0 +1,16 @@
+{
+  "isValidDocument": true,
+  "bank": "Mercantil",
+  "destinationBank": "Banesco",
+  "amount": 350.0,
+  "currency": "USD",
+  "date": "2026-05-20",
+  "time": "09:15",
+  "reference": "TRF20260520001",
+  "senderName": "María López",
+  "recipientName": "Servicios Pro S.A.",
+  "recipientAccount": "****8812",
+  "concept": "Pago factura #A-0042",
+  "confidence": "high",
+  "notes": null
+}

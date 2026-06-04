@@ -1,0 +1,16 @@
+{
+  "isValidDocument": true,
+  "bank": "Banesco",
+  "destinationBank": "Mercantil",
+  "amount": 1500000.0,
+  "currency": "VES",
+  "date": "2026-05-15",
+  "time": "14:32",
+  "reference": "240515001",
+  "senderName": "Juan Perez",
+  "recipientName": "Comercial XYZ C.A.",
+  "recipientAccount": "****3421",
+  "concept": "Pago servicios",
+  "confidence": "high",
+  "notes": null
+}

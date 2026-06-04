@@ -1,0 +1,215 @@
+/* ── Driver.js — tours de onboarding ─────────────────────────────────────── */
+@import 'driver.js/dist/driver.css';
+
+/* ─── Reset mínimo ──────────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; }
+
+/* ─── iOS / Android mobile fixes ────────────────────────────────────────────── */
+
+/* 1. Remove grey tap-highlight flash on all interactive elements */
+* { -webkit-tap-highlight-color: transparent; }
+
+/* 2. Eliminate 300ms tap delay on buttons/links; prevent double-tap zoom */
+button, a, [role="button"], input[type="button"], input[type="submit"] {
+  touch-action: manipulation;
+}
+
+/* 3. Prevent iOS Safari from auto-zooming when focusing an input < 16px.
+      Using max() keeps the logical size but the rendered minimum is 16px. */
+input, textarea, select {
+  font-size: max(16px, 1em);
+}
+
+/* 4. dvh viewport units — h-dvh / min-h-dvh utilities with 100vh fallback.
+      100dvh accounts for iOS Safari dynamic toolbar (shrinks when user scrolls). */
+.h-dvh {
+  height: 100vh;        /* fallback for older browsers */
+  height: 100dvh;
+}
+.min-h-dvh {
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
+/* 5. Convenience class for safe-area bottom padding (iPhone X+ notch / home bar).
+      Usage: add pb-safe to any element that sits at the very bottom of the screen. */
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+.pb-safe-4 {
+  padding-bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
+}
+.pb-safe-8 {
+  padding-bottom: calc(2rem + env(safe-area-inset-bottom, 0px));
+}
+
+/* ─── CSS Custom Properties — Design Tokens ─────────────────────────────────
+   Estos valores son el fallback. Se sobreescriben en runtime por applyTenantTheme()
+   con los valores del tenant activo.
+──────────────────────────────────────────────────────────────────────────── */
+:root {
+  /* ── Driver.js tour popover — estilo panel admin ── */
+  --driver-popover-title-font-size: 0.9375rem;        /* 15px */
+  --driver-popover-description-font-size: 0.875rem;   /* 14px */
+  --driver-popover-title-color: #0F172A;
+  --driver-popover-description-color: #64748B;
+  --driver-popover-footer-btn-margin-top: 0.5rem;
+  --driver-popover-max-width: 340px;
+  --driver-theme-color: #4F46E5;  /* indigo — paleta admin */
+
+  /* ── Colores del tenant (override via JS) ── */
+  --color-primary:      #111827;
+  --color-primary-fg:   #ffffff;   /* contraste sobre primary: calculado por JS */
+  --color-secondary:    #374151;
+  --color-accent:       #6B7280;
+
+  /* ── Superficie y fondo ── */
+  --color-bg:             #F9FAFB;
+  --color-surface:        #FFFFFF;
+  --color-surface-sunken: #F3F4F6;
+  --color-border:         #E5E7EB;
+
+  /* ── Texto ── */
+  --color-text-main:      #111827;
+  --color-text-secondary: #374151;
+  --color-text-muted:     #6B7280;
+  --color-text-disabled:  #9CA3AF;
+
+  /* ── Semánticos (no cambian por tenant) ── */
+  --color-success:    oklch(55% 0.16 145);
+  --color-success-bg: oklch(96% 0.05 145);
+  --color-warning:    oklch(60% 0.16 70);
+  --color-warning-bg: oklch(97% 0.05 70);
+  --color-danger:     oklch(52% 0.20 25);
+  --color-danger-bg:  oklch(97% 0.05 25);
+  --color-info:       oklch(55% 0.16 250);
+  --color-info-bg:    oklch(96% 0.05 250);
+
+  /* ── Tipografía (override via JS) ── */
+  --font-heading: 'Inter', system-ui, sans-serif;
+  --font-body:    'Inter', system-ui, sans-serif;
+
+  /* ── Radio de borde (override via JS según tenant.border_radius) ── */
+  --radius-sm:   6px;
+  --radius-md:   10px;
+  --radius-lg:   14px;
+  --radius-xl:   20px;
+  --radius-2xl:  24px;
+  --radius-full: 9999px;
+
+  /* ── Sombras ── */
+  --shadow-xs: 0 1px 2px rgba(0,0,0,0.05);
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.04);
+  --shadow-md: 0 4px 6px rgba(0,0,0,0.07), 0 2px 4px rgba(0,0,0,0.04);
+
+  /* ── Transiciones ── */
+  --transition-fast:   120ms ease;
+  --transition-normal: 200ms ease;
+
+  /* ── Touch targets mínimos ── */
+  --touch-min: 44px;
+}
+
+/* ─── Dark mode (tenant: dark_mode=true) ────────────────────────────────────── */
+[data-theme="dark"] {
+  --color-bg:              #111111;
+  --color-surface:         #1c1c1c;
+  --color-surface-sunken:  #161616;
+  --color-border:          #2d2d2d;
+  --color-text-main:       #f3f4f6;
+  --color-text-secondary:  #d1d5db;
+  --color-text-muted:      #9ca3af;
+  --color-text-disabled:   #6b7280;
+}
+
+/* ─── Base ───────────────────────────────────────────────────────────────────── */
+html { font-family: var(--font-body); color: var(--color-text-main); }
+body { margin: 0; background: var(--color-bg); -webkit-font-smoothing: antialiased; }
+
+/* ─── Tema Admin — Paleta Indigo ────────────────────────────────────────────── */
+.theme-admin {
+  --color-primary:      #4F46E5;   /* Indigo */
+  --color-primary-fg:   #ffffff;
+  --color-secondary:    #6366F1;   /* Indigo lighter */
+  --color-accent:       #818CF8;   /* Indigo light */
+  --color-bg:           #F8FAFC;   /* Slate very light */
+  --color-surface:      #FFFFFF;
+  --color-surface-sunken: #F1F5F9; /* Slate light */
+  --color-border:       #E2E8F0;   /* Slate lighter */
+}
+
+/* ─── Scrollbar oculta (pills horizontales) ─────────────────────────────────── */
+.scrollbar-none {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.scrollbar-none::-webkit-scrollbar { display: none; }
+
+/* ─── Tailwind utilities extras ──────────────────────────────────────────────── */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ─── Animación del carrito al agregar un ítem ──────────────────────────────── */
+@keyframes cart-bounce {
+  0%   { transform: scale(1); }
+  30%  { transform: scale(1.22); }
+  60%  { transform: scale(0.94); }
+  80%  { transform: scale(1.07); }
+  100% { transform: scale(1); }
+}
+.cart-bounce { animation: cart-bounce 0.42s ease-out; }
+
+/* ─── Estilos de impresión — QR de mesas (PMV.1) ────────────────────────────── */
+@media print {
+  /* Cuando se está imprimiendo QRs de mesas */
+  body.printing-qr-sheet {
+    margin: 0;
+    padding: 0;
+    background: white;
+  }
+
+  /* Ocultar todos los elementos excepto el sheet imprimible */
+  body.printing-qr-sheet > * {
+    display: none !important;
+  }
+
+  /* Mostrar solo el PrintableQrSheet (que es un div directo de body) */
+  body.printing-qr-sheet div.fixed.inset-0.z-50 {
+    display: flex !important;
+    position: static !important;
+    z-index: auto !important;
+    width: 100% !important;
+    height: 100% !important;
+    background: white !important;
+  }
+
+  /* En impresión, cada tarjeta es una página completa */
+  .qr-print-sheet {
+    display: block !important;
+    background: white !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  .qr-print-sheet > div {
+    display: block !important;
+    page-break-after: always;
+  }
+
+  /* Márgenes y espaciado de página */
+  @page {
+    margin: 0;
+    size: A4;
+  }
+
+  /* Asegurar que los QRs se impriman correctamente */
+  svg {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+}
+
+/* ─── Product modal image ────────────────────────────────────────────────── */
+.product-modal-img-wrap { aspect-ratio: 4/3; }
+@media (min-width: 768px) { .product-modal-img-wrap { aspect-ratio: auto; height: 208px; } }
