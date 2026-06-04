@@ -1,0 +1,129 @@
+name: CI
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+jobs:
+  # ── Unit tests + lint ──────────────────────────────────────────────────────
+  unit:
+    name: Typecheck, Lint & Unit Tests
+    runs-on: ubuntu-latest
+    services:
+      mongodb:
+        image: mongo:7
+        ports: ["27017:27017"]
+        env:
+          MONGO_INITDB_ROOT_USERNAME: root
+          MONGO_INITDB_ROOT_PASSWORD: root
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter=@bia/types lint
+      - run: pnpm turbo lint
+      - run: pnpm turbo test
+        env:
+          MONGODB_URI: mongodb://root:root@localhost:27017/bia_test?authSource=admin
+          REDIS_URL: redis://localhost:6379
+          JWT_SECRET: ci-test-secret
+          NODE_ENV: test
+
+  # ── Backend E2E (NestJS supertest) ────────────────────────────────────────
+  backend-e2e:
+    name: Backend E2E (supertest)
+    runs-on: ubuntu-latest
+    services:
+      mongodb:
+        image: mongo:7
+        ports: ["27017:27017"]
+        env:
+          MONGO_INITDB_ROOT_USERNAME: root
+          MONGO_INITDB_ROOT_PASSWORD: root
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter=api test:e2e
+        env:
+          MONGODB_URI: mongodb://root:root@localhost:27017/bia_e2e?authSource=admin
+          REDIS_URL: redis://localhost:6379
+          JWT_SECRET: ci-test-secret-e2e-backend
+          SUPERADMIN_EMAIL: sa@bia.dev
+          SUPERADMIN_PASSWORD: sa-pw-bootstrap
+          NODE_ENV: test
+
+  # ── Playwright UI E2E ─────────────────────────────────────────────────────
+  # Descomentado cuando los specs pasen localmente y se configuren los secrets.
+  # playwright:
+  #   name: Playwright E2E
+  #   runs-on: ubuntu-latest
+  #   needs: unit
+  #   services:
+  #     mongodb:
+  #       image: mongo:7
+  #       ports: ["27017:27017"]
+  #       env:
+  #         MONGO_INITDB_ROOT_USERNAME: root
+  #         MONGO_INITDB_ROOT_PASSWORD: root
+  #     redis:
+  #       image: redis:7-alpine
+  #       ports: ["6379:6379"]
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - uses: pnpm/action-setup@v4
+  #       with:
+  #         version: 9
+  #     - uses: actions/setup-node@v4
+  #       with:
+  #         node-version: 20
+  #         cache: pnpm
+  #     - run: pnpm install --frozen-lockfile
+  #     # Build web + superadmin
+  #     - run: pnpm --filter=web build
+  #       env:
+  #         VITE_API_URL: http://localhost:3001
+  #     # Start API en background (puerto 3001 para no colisionar con web dev)
+  #     - run: pnpm --filter=api start:prod &
+  #       env:
+  #         PORT: 3001
+  #         MONGODB_URI: mongodb://root:root@localhost:27017/bia_pw?authSource=admin
+  #         REDIS_URL: redis://localhost:6379
+  #         JWT_SECRET: ci-test-secret-pw
+  #         SUPERADMIN_EMAIL: ${{ secrets.SA_EMAIL }}
+  #         SUPERADMIN_PASSWORD: ${{ secrets.SA_PASSWORD }}
+  #         NODE_ENV: test
+  #     # Servir el build del frontend (puerto 5173)
+  #     - run: npx serve -s apps/web/dist -l 5173 &
+  #     # Esperar que ambos servicios estén listos
+  #     - run: npx wait-on http://localhost:3001/health http://localhost:5173 --timeout 60000
+  #     # Instalar Chromium
+  #     - run: pnpm exec playwright install chromium --with-deps
+  #     # Correr specs
+  #     - run: pnpm test:e2e:ui
+  #       env:
+  #         CI: true
+  #         PW_API_URL: http://localhost:3001
+  #         PW_BASE_URL: http://localhost:5173
+  #         SA_EMAIL: ${{ secrets.SA_EMAIL }}
+  #         SA_PASSWORD: ${{ secrets.SA_PASSWORD }}
+  #     - uses: actions/upload-artifact@v4
+  #       if: failure()
+  #       with:
+  #         name: playwright-report
+  #         path: playwright-report/
+  #         retention-days: 7

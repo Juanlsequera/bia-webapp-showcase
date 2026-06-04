@@ -1,0 +1,62 @@
+# Este compose levanta SOLO la infraestructura local:
+#   - MongoDB (puerto 27017)
+#   - Redis   (puerto 6379)
+#   - Mongo Express - UI para ver la DB (puerto 8081)
+#
+# Las apps (api, web, superadmin) corren fuera de Docker con `pnpm dev`
+# para tener hot reload instantáneo.
+#
+# Sin `container_name:` explícito — Compose genera nombres con el prefijo
+# del proyecto (ej: `bia-webapp-mongodb-1`), evitando conflictos al cambiar
+# de carpeta o renombrar el repo. Las DNS internas usan el nombre del
+# servicio (`mongodb`, `redis`), no el del container.
+
+services:
+  mongodb:
+    image: mongo:7
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: root
+      MONGO_INITDB_ROOT_PASSWORD: root
+      MONGO_INITDB_DATABASE: bia-webapp-local
+    volumes:
+      - mongo_data:/data/db
+      - ./scripts/mongo-init.js:/docker-entrypoint-initdb.d/init.js:ro
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  mongo-express:
+    image: mongo-express:latest
+    restart: unless-stopped
+    ports:
+      - "8081:8081"
+    environment:
+      ME_CONFIG_MONGODB_ADMINUSERNAME: root
+      ME_CONFIG_MONGODB_ADMINPASSWORD: root
+      ME_CONFIG_MONGODB_URL: mongodb://root:root@mongodb:27017/
+      ME_CONFIG_BASICAUTH: false
+    depends_on:
+      mongodb:
+        condition: service_healthy
+
+volumes:
+  mongo_data:
+  redis_data:

@@ -1,0 +1,206 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# docker.yml — Build & Push de la imagen Docker de la API
+#
+# ¿QUÉ HACE ESTE ARCHIVO?
+# =======================
+# Este workflow tiene DOS responsabilidades:
+#
+#   1. AUTOMÁTICO (push a develop):
+#      Cada vez que alguien hace merge a la rama develop, GitHub corre los tests
+#      automáticamente y, si pasan, construye y publica una imagen Docker nueva
+#      con los tags :develop y :develop-<sha>.
+#      Así siempre tenés una imagen Docker fresca de lo que está en develop,
+#      lista para usar en staging o probar en un servidor.
+#
+#   2. MANUAL (botón en GitHub):
+#      Podés ir a GitHub → Actions → "Docker — Build & Push" → Run workflow
+#      y elegir cualquier rama. Útil para generar una imagen de una feature branch
+#      o para regenerar la imagen de main con nuevos tags.
+#
+# ¿CÓMO SE LLAMA LA IMAGEN?
+# =========================
+# La imagen se sube a GHCR (GitHub Container Registry) — es gratis y no necesitás
+# cuenta extra. URL: ghcr.io/<usuario>/<repo>/api
+#
+# Tags automáticos según la rama:
+#   develop → :develop  +  :develop-<sha7>       (ej: :develop-a1b2c3d)
+#   main    → :latest   +  :main-<sha7>           (ej: :main-a1b2c3d)
+#   feat/x  → :feat-x   +  :feat-x-<sha7>
+#   v1.2.3  → :1.2.3    +  :1.2                   (si creás un git tag)
+#
+# ¿POR QUÉ HAY UN JOB DE TESTS ANTES DEL BUILD?
+# ===============================================
+# No tiene sentido construir y publicar una imagen rota. El job `test` actúa
+# como una puerta: si los tests o el lint fallan, el build ni empieza.
+# La imagen que llega a tu servidor siempre habrá pasado por los tests.
+#
+# ─────────────────────────────────────────────────────────────────────────────
+
+name: Docker — Build & Push
+
+on:
+  # ── Auto: se dispara solo al hacer push (o merge de PR) a develop ──────────
+  push:
+    branches: [develop]
+
+  # ── Manual: botón "Run workflow" en la tab de Actions de GitHub ─────────────
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}/api
+
+jobs:
+  # ═══════════════════════════════════════════════════════════════════════════
+  # JOB 1: TEST — Puerta de calidad
+  # ───────────────────────────────────────────────────────────────────────────
+  # Este job levanta MongoDB y Redis en el mismo runner (como servicios Docker),
+  # instala las dependencias del monorepo y corre todos los tests unitarios.
+  # Si algo falla aquí, el job `build` de abajo NO se ejecuta.
+  # ═══════════════════════════════════════════════════════════════════════════
+  test:
+    name: Tests (gate previo al build)
+    runs-on: ubuntu-latest
+
+    # ── Servicios: bases de datos que necesitan los tests ────────────────────
+    # GitHub Actions levanta estos contenedores Docker antes de arrancar los steps.
+    # Los tests se conectan a ellos por localhost en los puertos mapeados.
+    services:
+      mongodb:
+        image: mongo:7
+        ports: ["27017:27017"]
+        env:
+          MONGO_INITDB_ROOT_USERNAME: root
+          MONGO_INITDB_ROOT_PASSWORD: root
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+
+    steps:
+      # ── Descarga el código de la rama que disparó el workflow ────────────
+      - uses: actions/checkout@v4
+
+      # ── Instala pnpm (el gestor de paquetes del monorepo) ────────────────
+      - uses: pnpm/action-setup@v4
+
+      # ── Instala Node.js 20 con cache de pnpm ─────────────────────────────
+      # El cache guarda node_modules entre runs para que no se descargue
+      # todo desde npm cada vez (ahorra ~1-2 min por build).
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      # ── Instala las dependencias del monorepo ────────────────────────────
+      # --frozen-lockfile asegura que se instale exactamente lo que está
+      # en pnpm-lock.yaml, sin actualizaciones silenciosas.
+      - run: pnpm install --frozen-lockfile
+
+      # ── Lint: verifica que no haya errores de estilo/tipos ───────────────
+      - run: pnpm turbo lint
+
+      # ── Tests unitarios de todos los paquetes ────────────────────────────
+      # Variables de entorno apuntan a los servicios levantados arriba.
+      - run: pnpm turbo test
+        env:
+          MONGODB_URI: mongodb://root:root@localhost:27017/bia_test?authSource=admin
+          REDIS_URL: redis://localhost:6379
+          JWT_SECRET: ci-test-secret
+          NODE_ENV: test
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # JOB 2: BUILD — Construir y publicar la imagen Docker
+  # ───────────────────────────────────────────────────────────────────────────
+  # Este job SOLO se ejecuta si el job `test` pasó (necesita: test).
+  # Construye la imagen Docker de la API y la sube a GHCR con los tags
+  # apropiados para la rama actual.
+  # ═══════════════════════════════════════════════════════════════════════════
+  build:
+    name: Build & Push — ${{ github.ref_name }}
+    runs-on: ubuntu-latest
+    needs: test   # ← BLOQUEO: solo corre si tests pasaron
+    permissions:
+      contents: read
+      packages: write   # necesario para poder escribir en GHCR
+
+    steps:
+      - name: Checkout (${{ github.ref_name }})
+        uses: actions/checkout@v4
+
+      # ── Login a GHCR ──────────────────────────────────────────────────────
+      # GITHUB_TOKEN es un token automático que GitHub genera para cada workflow.
+      # No necesitás configurar ningún secret — viene gratis.
+      - name: Login a GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # ── Buildx: habilita builds multi-plataforma y caché avanzado ─────────
+      # Buildx es una extensión de Docker que permite construir imágenes para
+      # múltiples arquitecturas (amd64, arm64) y usar cache eficiente.
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # ── Metadata: calcula los tags de la imagen ───────────────────────────
+      # Esta action lee el contexto del workflow (rama, sha, tags de git)
+      # y genera automáticamente los nombres y tags para la imagen.
+      # Resultado en steps.meta.outputs.tags (se usa en el step de build).
+      - name: Calcular tags de la imagen
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            # Tag con nombre de la rama: :develop, :main, :feat-mi-feature
+            type=raw,value=${{ github.ref_name }}
+
+            # Tag con SHA corto para identificar el commit exacto (útil para rollback)
+            # Ejemplos: :develop-a1b2c3d  /  :main-a1b2c3d
+            type=sha,prefix=${{ github.ref_name }}-,format=short
+
+            # :latest solo cuando la rama es main (convención estándar de Docker Hub)
+            type=raw,value=latest,enable=${{ github.ref_name == 'main' }}
+
+            # Si creás un git tag v1.2.3, también etiqueta la imagen con esa versión
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+
+      # ── Build & Push ──────────────────────────────────────────────────────
+      # Aquí ocurre el trabajo real:
+      # 1. Docker lee el Dockerfile en la raíz del repo
+      # 2. Construye la imagen capa por capa (aprovechando el cache de GHA)
+      # 3. La sube a GHCR con todos los tags calculados en el step anterior
+      #
+      # cache-from/cache-to: guarda las capas del build entre runs.
+      # La primera vez tarda ~5 min. Las siguientes ~1-2 min si el código
+      # no cambió mucho (las capas de node_modules se reutilizan).
+      - name: Build & Push imagen
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # ── Resumen visible en la UI de GitHub Actions ───────────────────────
+      # Muestra un resumen claro después del build: qué tags se generaron
+      # y cómo hacer pull de la imagen. Aparece en la pestaña "Summary" del run.
+      - name: Resumen del build
+        run: |
+          echo "## ✅ Imagen generada desde \`${{ github.ref_name }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Commit:** \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Tags generados:**" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "${{ steps.meta.outputs.tags }}" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Para hacer pull:**" >> $GITHUB_STEP_SUMMARY
+          echo '```bash' >> $GITHUB_STEP_SUMMARY
+          echo "docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY

@@ -1,0 +1,37 @@
+# Node modules — se reinstalan dentro del container
+**/node_modules
+
+# Builds locales — se regeneran en el container
+**/dist
+**/.turbo
+
+# Apps que NO van en la imagen de la API
+# Excluimos el código fuente pero dejamos package.json
+# (pnpm lo necesita para resolver el workspace graph en pnpm install)
+apps/web/**
+!apps/web/package.json
+apps/superadmin/**
+!apps/superadmin/package.json
+apps/landing/**
+!apps/landing/package.json
+
+# Archivos de desarrollo local
+.env
+.env.*
+!.env.example
+docker-compose*.yml
+
+# Git y CI
+.git
+.github
+
+# Docs y scripts de dev
+docs
+scripts
+*.md
+PROMPT_MAESTRO.md
+
+# Editor
+.vscode
+.idea
+*.log
