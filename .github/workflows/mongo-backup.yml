@@ -13,53 +13,53 @@
 #
 # Requiere secret en GitHub: MONGODB_URI (mismo string que usa Render).
 
-name: MongoDB Daily Backup
+# name: MongoDB Daily Backup
 
-on:
-  schedule:
-    # 07:00 UTC = 03:00 Venezuela (UTC-4). Hora valle, sin tráfico.
-    - cron: '0 7 * * *'
-  workflow_dispatch:
+# on:
+#   schedule:
+#     # 07:00 UTC = 03:00 Venezuela (UTC-4). Hora valle, sin tráfico.
+#     - cron: '0 7 * * *'
+#   workflow_dispatch:
 
-jobs:
-  backup:
-    name: Dump + upload artifact
-    runs-on: ubuntu-22.04
-    timeout-minutes: 15
+# jobs:
+#   backup:
+#     name: Dump + upload artifact
+#     runs-on: ubuntu-22.04
+#     timeout-minutes: 15
 
-    steps:
-      - name: Verify secret is set
-        run: |
-          if [ -z "${{ secrets.MONGODB_URI }}" ]; then
-            echo "❌ Falta el secret MONGODB_URI. Configurar en GitHub → Settings → Secrets → Actions."
-            exit 1
-          fi
+#     steps:
+#       - name: Verify secret is set
+#         run: |
+#           if [ -z "${{ secrets.MONGODB_URI }}" ]; then
+#             echo "❌ Falta el secret MONGODB_URI. Configurar en GitHub → Settings → Secrets → Actions."
+#             exit 1
+#           fi
 
-      - name: Install mongodump (mongodb-database-tools 100.10.0)
-        run: |
-          set -e
-          curl -sLo mongotools.tgz https://fastdl.mongodb.org/tools/db/mongodb-database-tools-ubuntu2204-x86_64-100.10.0.tgz
-          tar -xzf mongotools.tgz
-          sudo cp mongodb-database-tools-*/bin/mongodump /usr/local/bin/
-          mongodump --version
+#       - name: Install mongodump (mongodb-database-tools 100.10.0)
+#         run: |
+#           set -e
+#           curl -sLo mongotools.tgz https://fastdl.mongodb.org/tools/db/mongodb-database-tools-ubuntu2204-x86_64-100.10.0.tgz
+#           tar -xzf mongotools.tgz
+#           sudo cp mongodb-database-tools-*/bin/mongodump /usr/local/bin/
+#           mongodump --version
 
-      - name: Run mongodump
-        env:
-          MONGODB_URI: ${{ secrets.MONGODB_URI }}
-        run: |
-          # --gzip: archive compresso
-          # --archive=backup.gz: single-file output (apto para artifact)
-          mongodump --uri="$MONGODB_URI" --archive=backup.gz --gzip
-          ls -lh backup.gz
-          echo "Backup size: $(du -h backup.gz | cut -f1)"
+#       - name: Run mongodump
+#         env:
+#           MONGODB_URI: ${{ secrets.MONGODB_URI }}
+#         run: |
+#           # --gzip: archive compresso
+#           # --archive=backup.gz: single-file output (apto para artifact)
+#           mongodump --uri="$MONGODB_URI" --archive=backup.gz --gzip
+#           ls -lh backup.gz
+#           echo "Backup size: $(du -h backup.gz | cut -f1)"
 
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: mongo-backup-${{ github.run_id }}
-          path: backup.gz
-          # 90 días — máximo que ofrece GitHub gratis. Suficiente para
-          # rollback de incidentes recientes. Para retención mayor, subir
-          # a S3/R2 desde un step adicional.
-          retention-days: 90
-          compression-level: 0  # ya está gzipeado por mongodump
+#       - name: Upload artifact
+#         uses: actions/upload-artifact@v4
+#         with:
+#           name: mongo-backup-${{ github.run_id }}
+#           path: backup.gz
+#           # 90 días — máximo que ofrece GitHub gratis. Suficiente para
+#           # rollback de incidentes recientes. Para retención mayor, subir
+#           # a S3/R2 desde un step adicional.
+#           retention-days: 90
+#           compression-level: 0  # ya está gzipeado por mongodump
